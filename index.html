@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<meta name="theme-color" content="#2f64c9">
+<meta name="description" content="תקציב שנתי: הכנסות, הוצאות, חסכונות והון עצמי, חודש אחרי חודש. הנתונים נשמרים רק במכשיר שלך.">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="תקציב שנתי">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="format-detection" content="telephone=no">
+<title>תקציב שנתי</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<div id="top" hidden>
+  <header>
+    <h1>💰<span class="full"> תקציב שנתי</span></h1>
+    <select id="yr" aria-label="שנה"></select>
+    <button id="undo" aria-label="ביטול פעולה" title="ביטול (Ctrl+Z)">↶</button>
+    <button id="redo" aria-label="שחזור פעולה" title="שחזור (Ctrl+Y)">↷</button>
+    <span class="sp"></span>
+    <span id="status" role="status" aria-live="polite"></span>
+    <button id="hdrInstall" hidden title="התקנה כאפליקציה">📲<span class="lbl">התקן</span></button>
+    <button id="hdrImport" title="טעינת קובץ מהבנק או מחברת האשראי" aria-label="טעינת קובץ מהבנק">⬆<span class="lbl">טעינת קובץ</span></button>
+    <button id="hdrBackup" title="שמירת גיבוי לקובץ" aria-label="שמירת גיבוי">⬇<span class="lbl">גיבוי</span></button>
+  </header>
+  <nav id="nav" aria-label="חודשים"></nav>
+</div>
+<main id="main"><section class="box">טוען…</section></main>
+<button id="fab" class="fab" hidden aria-label="הוספה מהירה של הוצאה או הכנסה">＋</button>
+<div id="modal" class="modal" hidden>
+  <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="dlgMsg">
+    <p id="dlgMsg" class="ttl"></p>
+    <div id="dlgBody"></div>
+    <div class="dlgBtns">
+      <button id="dlgOk" class="pri">אישור</button>
+      <button id="dlgCancel" class="ghost">ביטול</button>
+    </div>
+  </div>
+</div>
+<input type="file" id="fileBackup" hidden>
+<input type="file" id="fileDocs" accept=".xlsx,.xls,.csv,.txt,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv,text/plain" multiple hidden>
+<script src="js/calc.js"></script>
+<script src="js/demo.js"></script>
+<script src="js/store.js"></script>
+<script src="vendor/xlsx.full.min.js"></script>
+<script src="js/importer.js"></script>
+<script src="js/app.js"></script>
+<script src="js/wizard.js"></script>
+<script src="js/import-ui.js"></script>
+</body>
+</html>
