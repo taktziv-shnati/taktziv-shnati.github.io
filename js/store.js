@@ -2,7 +2,7 @@
 (function (root) {
   'use strict';
   const DB = 'budget4all', ST = 'kv', LS = 'budget4all.', META = 'budget4all.meta';
-  const DAILY = 10, BEFORE = 5;
+  const DAILY = 10, BEFORE = 8;
   let db = null, mode = 'idb';
 
   const meta = () => { try { return JSON.parse(localStorage.getItem(META) || '{}'); } catch (_) { return {}; } };
@@ -120,11 +120,16 @@
     } catch (_) { /* a missing copy is not fatal */ }
   }
   // A copy kept right before an automatic or big action (opening months, import, restore), so it can be undone even after closing the app.
-  async function snapshotBefore(S, label) {
+  async function snapshotBefore(S, label, opt) {
+    const prefix = (opt && opt.prefix) || 'before-', keep = (opt && opt.keep) || BEFORE;
     try {
-      const k = 'before-' + Date.now();
+      if (opt && opt.minGapMin) {
+        const last = (await keys()).filter(k => k.startsWith(prefix)).sort().pop();
+        if (last && Date.now() - +last.slice(prefix.length) < opt.minGapMin * 60e3) return last;
+      }
+      const k = prefix + Date.now();
       await set(k, JSON.stringify({ time: Date.now(), kind: 'before', label, data: S }));
-      await prune('before-', BEFORE);
+      await prune(prefix, keep);
       return k;
     } catch (_) { return null; }
   }
@@ -134,7 +139,7 @@
   }
   async function snapshots() {
     try {
-      const ks = (await keys()).filter(k => k.startsWith('snap-') || k.startsWith('before-'));
+      const ks = (await keys()).filter(k => k.startsWith('snap-') || k.startsWith('before-') || k.startsWith('upd-'));
       const out = [];
       for (const k of ks) { try { const v = JSON.parse(await get(k)); v.key = k; out.push(v); } catch (_) { /* skip */ } }
       return out.sort((a, b) => b.time - a.time);

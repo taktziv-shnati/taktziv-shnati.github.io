@@ -80,7 +80,9 @@
     return m;
   }
   // Older saved data gets the newer fields (only the unused card charge day is dropped).
+  const DATA_V = 2;
   function migrate(S) {
+    if (+S.v > DATA_V) return S; // written by a newer version: leave it exactly as it is
     S.settings = Object.assign(SETTINGS_DEFAULT(), S.settings || {});
     S.profile = S.profile || {}; if (!S.profile.payDay) S.profile.payDay = 1; delete S.profile.chargeDay;
     ['mappings', 'rules', 'updates', 'categories'].forEach(k => { if (!Array.isArray(S[k])) S[k] = []; });
@@ -372,7 +374,7 @@
   const isValid = d => !!d && typeof d === 'object' && d.app === 'budget-for-all' && Array.isArray(d.sections) && !!d.years && typeof d.years === 'object';
 
   const api = { num, r2, clone, uid, TYPES, DEFAULT_SECTIONS, DEFAULT_CATEGORIES, CATEGORY_PRESETS, ICONS, SETTINGS_DEFAULT,
-    newBudget, seedMonth, migrate, newRow, emptyMonth, active, rowsOf, keepOf,
+    DATA_V, newBudget, seedMonth, migrate, newRow, emptyMonth, active, rowsOf, keepOf,
     calc, chainMonths, recompute, prevRow, setSavingBalance, deriveMonth, currentMonth, catchUp, openThrough, hasStarted, insights, loanLeft, isEstimate, yearSummary,
     addSection, removeSection, sectionHasData, removeCategory, isValid };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

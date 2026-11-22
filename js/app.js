@@ -189,6 +189,7 @@
   async function doSave() {
     saveT = null;
     if (staleTab) return;
+    if (window.BUILD) S.writtenBy = window.BUILD.n;
     const r = await Store.save(S);
     if (r.ok) {
       if (!phone()) setStatus('נשמר במכשיר ✓');
@@ -203,6 +204,11 @@
     if (ok) autoState = 'on';
     else { const st = (await Store.autoStatus()).state; autoState = st === 'on' ? 'error' : st; } // permission is fine but the file could not be written (moved, locked, disk full)
     if (autoState !== before) render();
+  }
+  async function saveNow() {
+    if (saveT) { clearTimeout(saveT); saveT = null; }
+    if (S && !staleTab) { if (window.BUILD) S.writtenBy = window.BUILD.n; Store.saveSync(S); await Store.save(S); }
+    if (autoT) { clearTimeout(autoT); autoT = null; await runAuto(); }
   }
   function flushSave() { if (saveT) { clearTimeout(saveT); if (S && !staleTab) Store.saveSync(S); doSave(); } }
   window.addEventListener('pagehide', flushSave);
@@ -243,6 +249,7 @@
     else if (ui.year === cur.y && Y().months[cur.k]) ui.tab = cur.k;
     else { const lm = lastMonth(); ui.tab = lm != null ? lm : 'summary'; }
     $('#top').hidden = false;
+    if (Store.meta().seenBuild == null && window.BUILD) Store.setMeta({ seenBuild: opts.fresh ? window.BUILD.n : window.BUILD.n - 1 });
     if (!staleTab && !ownLock && !(await claimSaving(false))) staleTab = true;
     autoState = (await Store.autoStatus()).state;
     render();
@@ -256,9 +263,28 @@
     const r = await Store.load();
     if (r.error) { $('#main').innerHTML = `<section class="box"><h3>אי אפשר לשמור נתונים</h3><p>${esc(r.error)}</p></section>`; return; }
     if (r.message) notice = r.message;
-    if (r.data && C.isValid(r.data)) { await start(r.data); if (r.message) tell(r.message); return; }
+    if (r.data && +r.data.v > C.DATA_V) return needUpdate();
+    if (r.data && C.isValid(r.data)) {
+      await start(r.data, restorePlace());
+      if (r.message) tell(r.message);
+      return;
+    }
     window.Wizard.show();
   }
+  function needUpdate() {
+    staleTab = true; // never save: the saved data belongs to a newer version
+    $('#main').innerHTML = `<section class="box stack"><h3>האפליקציה צריכה להתעדכן</h3><p>הנתונים שלך נשמרו בגרסה חדשה יותר של האפליקציה. הם שמורים ולא נפגעו. כדי לפתוח אותם, צריך לעדכן (חיבור לאינטרנט).</p><div class="row"><button class="pri" id="forceUpdate">עדכן עכשיו</button></div></section>`;
+    $('#forceUpdate').addEventListener('click', () => window.BudgetUpdate ? window.BudgetUpdate.force() : location.reload());
+    if (window.BudgetUpdate) window.BudgetUpdate.check();
+  }
+  // after an update refresh: back to the same year, screen and scroll position
+  function restorePlace() {
+    let u = null; try { u = JSON.parse(sessionStorage.getItem('b4a-updated') || 'null'); sessionStorage.removeItem('b4a-updated'); } catch (_) { /* ignore */ }
+    if (!u || !u.place || Date.now() - u.time > 60e3) return {};
+    setTimeout(() => { scrollTo(0, u.place.y || 0); setStatus('עודכן לגרסה ' + (window.BUILD ? window.BUILD.n : '') + ' ✓'); }, 50);
+    return { year: u.place.year, tab: u.place.tab, noCatchUp: false };
+  }
+  const place = () => ({ year: ui.year, tab: ui.tab, y: window.scrollY });
   window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvt = e; $('#hdrInstall').hidden = false; });
   window.addEventListener('appinstalled', () => { installEvt = null; $('#hdrInstall').hidden = true; setStatus('האפליקציה הותקנה ✓'); });
   mq.addEventListener ? mq.addEventListener('change', () => { if (S && !window.ImportUI.active) render(); }) : mq.addListener(() => { if (S) render(); });
@@ -545,7 +571,7 @@
       <p class="muted" style="margin:0">מוחק את כל הנתונים מהמכשיר הזה וחוזר למסך הפתיחה. כדאי לשמור גיבוי לפני.</p>
       <div class="row"><button class="danger" id="wipe">מחק הכל והתחל מחדש</button></div>
     </section>
-    <p class="small">תקציב שנתי הוא כלי מעקב אישי, לא ייעוץ פיננסי. אין שרת: הנתונים לא נשלחים לשום מקום. · אחסון: ${Store.mode === 'idb' ? 'IndexedDB' : 'localStorage'}</p>`;
+    <p class="small">תקציב שנתי הוא כלי מעקב אישי, לא ייעוץ פיננסי. אין שרת: הנתונים לא נשלחים לשום מקום. · גרסה ${window.BUILD ? window.BUILD.n : ''} · אחסון: ${Store.mode === 'idb' ? 'IndexedDB' : 'localStorage'}</p>`;
   }
   function autoBox() {
     const meta = Store.meta();
@@ -579,6 +605,10 @@
       extra += `<div class="banner bad"><span class="grow">⚠ הגיבוי האוטומטי לקובץ נכשל (אולי הקובץ הוזז או נעול). הנתונים שמורים במכשיר, אבל לא בקובץ.</span><button class="sm" id="autoChoose">בחר קובץ מחדש</button><button class="sm ghost" id="autoRetry">נסה שוב</button></div>`;
     if (autoState === 'prompt' && ui.tab !== 'settings')
       extra += `<div class="banner info"><span class="grow">💾 הגיבוי האוטומטי לקובץ ממתין לאישור (הדפדפן מבקש אחרי כל פתיחה).</span><button class="sm pri" id="autoResume">המשך גיבוי אוטומטי</button></div>`;
+    const B = window.BUILD, news = B && meta.seenBuild != null && meta.seenBuild < B.n ? (B.notes || []).filter(x => x.n > meta.seenBuild) : [];
+    if (news.length && ui.tab !== 'settings')
+      extra += `<div class="banner ok"><span class="grow">✨ <b>מה חדש:</b> ${news.map(x => esc(x.text)).join(' ')}</span><button class="sm ghost" id="newsOk">הבנתי</button></div>`;
+    else if (B && meta.seenBuild != null && meta.seenBuild < B.n) Store.setMeta({ seenBuild: B.n });
     const remindDays = Store.isMobile() ? 7 : 14;
     const autoFresh = autoState === 'on' && meta.autoBackup && Date.now() - meta.autoBackup < 3 * 864e5;
     if (anyData && used && !autoFresh && ui.tab !== 'settings' && (!meta.backup || Date.now() - meta.backup > remindDays * 864e5) && meta.remindOff !== new Date().toISOString().slice(0, 10))
@@ -1017,6 +1047,7 @@
     if (t.id === 'autoResume') { try { if (await Store.autoResume(S)) { autoState = 'on'; setStatus('הגיבוי האוטומטי פעיל ✓'); } else autoState = (await Store.autoStatus()).state; } catch (_) { /* canceled */ } render(); return; }
     if (t.id === 'autoChoose') { try { const n = await Store.autoChoose(S); autoState = 'on'; render(); tell('מעכשיו כל שינוי נשמר לבד גם לקובץ "' + n + '". אם שמרת אותו בתוך תיקיית OneDrive או Google Drive, הוא מגובה גם בענן.\nאחרי כל פתיחה של האפליקציה הדפדפן יבקש אישור בלחיצה אחת.'); } catch (e) { if (!e || e.name !== 'AbortError') tell('לא הצלחתי ליצור קובץ גיבוי: ' + (e && e.message)); } return; }
     if (t.id === 'autoOffBtn') { await Store.autoOff(); autoState = 'off'; render(); setStatus('הגיבוי האוטומטי כובה'); return; }
+    if (t.id === 'newsOk') { Store.setMeta({ seenBuild: window.BUILD.n }); render(); return; }
     if (t.id === 'iosTipOff') { Store.setMeta({ iosTipOff: 1 }); render(); return; }
     if (t.id === 'autoOk') { autoNote = null; render(); return; }
     if (t.id === 'autoUndo') {
@@ -1110,6 +1141,7 @@
     let d;
     try { d = JSON.parse(String(await Store.readFile(f)).replace(/^﻿/, '')); } catch (_) { tell('הקובץ הזה אינו גיבוי של תקציב שנתי.'); return; }
     if (!C.isValid(d)) { tell('הקובץ הזה אינו גיבוי של תקציב שנתי.'); return; }
+    if (+d.v > C.DATA_V) { tell('הגיבוי נשמר בגרסה חדשה יותר של האפליקציה. סגור ופתח את האפליקציה כדי שתתעדכן, ואז נסה שוב.'); return; }
     if (staleTab) { tell('האפליקציה פתוחה בחלון אחר. לחץ קודם "המשך לעבוד בחלון הזה", ואז פתח את הגיבוי.'); return; }
     if (S && !(await ask(`לפתוח את הגיבוי "${f.name}"? הנתונים שבמכשיר יוחלפו (אפשר לבטל עם ↶, ונשמר עותק בהגדרות).`, { ok: 'פתח' }))) return;
     if (S) { pushUndo(true); await Store.snapshotBefore(S, 'לפני פתיחת קובץ גיבוי'); }
@@ -1130,7 +1162,7 @@
 
   window.App = {
     get S() { return S; }, ui, MN, esc, money, fmt, I, ask, tell, setStatus, start, render, pushUndo, queueSave, recompute, curM, Y, openMonth,
-    catName, sec, flushSave, get UNDO() { return UNDO; }, undo, redo, evalExpr, numVal, applyLook, phone
+    catName, sec, flushSave, saveNow, place, get UNDO() { return UNDO; }, undo, redo, evalExpr, numVal, applyLook, phone
   };
   btns();
   // start once every script (onboarding, import) has loaded
