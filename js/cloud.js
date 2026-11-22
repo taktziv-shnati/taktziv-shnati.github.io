@@ -6,7 +6,7 @@
 'use strict';
 (function () {
   // App keys from the provider consoles (public by design: PKCE / token flow, no secret). Empty = the option is hidden.
-  const CFG = { dropbox: '', google: '' };
+  const CFG = { dropbox: 'pm3w123kptvtgy5', google: '' };
   const FILE = 'budget.json', K = 'budget4all.cloud', REQ = 'b4a.oauthReq', RES = 'b4a.oauthRes';
   const A = () => window.App, C = () => window.BudgetCalc, Store = () => window.BudgetStore;
   const redirect = () => new URL('oauth.html', location.href).href;
@@ -235,6 +235,7 @@
     if (!ids.length) return '';
     return `<div class="install"><b>☁ סנכרון אוטומטי בין הטלפון למחשב</b><p style="margin:4px 0 8px">מתחברים פעם אחת בכל מכשיר עם אותו חשבון, ומאז הכל מסתנכרן לבד. הנתונים נשמרים בתיקייה פרטית בחשבון שלך, ורק אתה רואה אותם.</p>
       <div class="cloudopts">${ids.map(id => `<button class="${id === ids[0] ? 'pri' : 'ghost'}" data-cloud="connect:${id}"${usable(id) ? '' : ' disabled'}>${P[id].icon} ${P[id].name}</button>`).join('')}</div>
+      ${CFG.dropbox ? '<p class="muted" style="margin:6px 0 0">ב-Dropbox תופיע אזהרה "Before you connect this app". זה רגיל לאפליקציה חדשה: לוחצים Continue ואז Allow.</p>' : ''}
       ${CFG.google && isIOSApp() ? '<p class="muted" style="margin:6px 0 0">באייפון, באפליקציה שבמסך הבית, אפשר רק Dropbox.</p>' : ''}
       ${CFG.google ? '<p class="muted" style="margin:6px 0 0">Google Drive מבקש לחיצה אחת לחיבור מחדש אחרי שעה בלי שימוש. Dropbox אוטומטי לגמרי.</p>' : ''}</div>`;
   }
