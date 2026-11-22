@@ -30,11 +30,12 @@
     if (s.step === 0) return `<div class="welcome-hero"><img class="logo" src="icon.svg" alt=""></div>
       <h2 style="text-align:center">תקציב שנתי</h2>
       <p class="lead" style="text-align:center">רואים לאן הולך הכסף, חודש אחרי חודש: הכנסות, הוצאות, חסכונות ושווי נקי.</p>
-      <div class="banner info">🔒 הכל נשמר רק במכשיר שלך. אין הרשמה, ושום דבר לא נשלח לשום מקום.</div>
+      <div class="banner info">🔒 הכל נשמר רק במכשיר שלך. אין הרשמה, ושום דבר לא נשלח אלינו. אפשר לסנכרן בין הטלפון למחשב דרך חשבון הענן הפרטי שלך.</div>
       ${iosCard()}
       <div class="grow"></div>
       <button class="big pri" data-w="new">בוא נתחיל</button>
       <button class="big" data-w="open">יש לי קובץ גיבוי</button>
+      ${window.Cloud ? window.Cloud.welcome() : ''}
       <button class="big" data-w="demo">רק להציץ (נתוני דוגמה)</button>
       <p class="small">כלי מעקב אישי, לא ייעוץ פיננסי</p>`;
     if (s.step === 1) return bar(1) + `<h2>מה יש לך?</h2>

@@ -189,7 +189,7 @@ main.ro input,main.ro select{pointer-events:none;opacity:.65}
 .wiz .card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:20px;display:flex;flex-direction:column;gap:14px;min-height:calc(100dvh - 40px)}
 .wiz h2{margin:0;font-size:1.35rem}
 .wiz .lead{color:var(--mut);margin:0}
-.wiz .bar{height:5px;background:var(--pri2);border-radius:3px}.wiz .bar i{display:block;height:100%;background:var(--pri);border-radius:3px;transition:width .2s}
+.wiz .bar,.guide .bar{height:5px;background:var(--pri2);border-radius:3px}.wiz .bar i,.guide .bar i{display:block;height:100%;background:var(--pri);border-radius:3px;transition:width .2s}
 .wiz .grow{flex:1}
 .tiles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
 @media(min-width:480px){.tiles{grid-template-columns:repeat(4,minmax(0,1fr))}}
@@ -250,3 +250,17 @@ main.ro input,main.ro select{pointer-events:none;opacity:.65}
 .rvi select{max-width:100%}
 .cnt{font-size:.8rem;background:var(--pri2);border-radius:999px;padding:1px 8px}
 @media print{#top,.fab,.bh .tools,button.add,button.more,button.del{display:none!important}body{background:#fff}.box{box-shadow:none;break-inside:avoid}}
+/* first steps, help, cloud options */
+.guide{border:1.5px solid var(--pri);gap:8px}
+.guide .bar{margin:6px 0 2px}
+.steps{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.steps li{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:10px;background:var(--pri2)}
+.steps li .grow{display:flex;flex-direction:column;min-width:0}
+.steps li small{color:var(--mut);font-size:.8rem}
+.steps li .ck{width:30px;height:30px;flex:none;display:grid;place-items:center;border-radius:50%;background:var(--card);font-size:1rem}
+.steps li.done{opacity:.6}.steps li.done .ck{background:var(--pri);color:#fff;font-weight:700}
+.steps li.done b{text-decoration:line-through}
+@media (min-width:900px){.steps{grid-template-columns:repeat(auto-fill,minmax(260px,1fr))}}
+.faq{border-bottom:1px solid var(--line);padding:6px 0}.faq summary{cursor:pointer;font-weight:600;padding:4px 0}.faq p{margin:4px 0 6px;color:var(--mut)}
+.cloudopts{display:flex;flex-wrap:wrap;gap:8px}.cloudopts button{flex:1;min-width:140px}
+.steps li.done{padding:4px 10px}.steps li.done small{display:none}.steps li.done .ck{width:22px;height:22px;font-size:.8rem}

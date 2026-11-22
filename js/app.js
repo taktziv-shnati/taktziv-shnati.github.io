@@ -195,6 +195,7 @@
       if (!phone()) setStatus('נשמר במכשיר ✓');
       // the automatic backup file follows a few seconds after the last change
       if (autoState === 'on' || autoState === 'error') { clearTimeout(autoT); autoT = setTimeout(runAuto, 3000); }
+      if (window.Cloud) window.Cloud.changed();
     } else setStatus('⚠ השמירה נכשלה: ' + r.error, true);
   }
   async function runAuto() {
@@ -286,7 +287,7 @@
   }
   const place = () => ({ year: ui.year, tab: ui.tab, y: window.scrollY });
   window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvt = e; $('#hdrInstall').hidden = false; });
-  window.addEventListener('appinstalled', () => { installEvt = null; $('#hdrInstall').hidden = true; setStatus('האפליקציה הותקנה ✓'); });
+  window.addEventListener('appinstalled', () => { installEvt = null; Store.setMeta({ installed: 1 }); $('#hdrInstall').hidden = true; setStatus('האפליקציה הותקנה ✓'); });
   mq.addEventListener ? mq.addEventListener('change', () => { if (S && !window.ImportUI.active) render(); }) : mq.addListener(() => { if (S) render(); });
 
   /* ---------- month: rows ---------- */
@@ -554,12 +555,14 @@
       <label class="chk"><span class="sw"><input type="checkbox" id="autoOpen"${S.settings.autoOpen !== false ? ' checked' : ''}><i></i></span> לפתוח לבד חודש חדש כשהוא מתחיל</label>
       ${hasType('future') ? `<label class="chk"><input type="checkbox" id="incf" ${S.settings.includeFuture ? 'checked' : ''}> לכלול את כל הכספים העתידיים בשווי הנקי</label>` : ''}
     </section>
-    <section class="box stack"><h3>📲 התקנה במכשיר</h3>${installHelp()}</section>
-    <section class="box stack"><h3>💾 גיבוי ומעבר בין מכשירים</h3>
-      <p class="muted" style="margin:0">הנתונים נשמרים רק במכשיר הזה. כדי לא לאבד אותם, ולהעביר לטלפון או למחשב אחר, שומרים קובץ גיבוי (למשל ב"קבצים", ב-Drive או בוואטסאפ לעצמך) ופותחים אותו במכשיר השני.</p>
-      <p class="muted" style="margin:0">⚠ בקובץ יש את כל הנתונים שלך, כולל תיאורי פעולות מהבנק. שלח אותו רק לעצמך.</p>
+    <section class="box stack" id="installBox"><h3>📲 התקנה במכשיר</h3>${installHelp()}</section>
+    <section class="box stack" id="syncBox"><h3>☁ גיבוי וסנכרון בין מכשירים</h3>
+      ${window.Cloud ? window.Cloud.box() : ''}
+      <details${window.Cloud && window.Cloud.on ? '' : ' open'}><summary><b>💾 קובץ גיבוי (כל מכשיר, בלי חשבון)</b></summary>
+      <p class="muted" style="margin:6px 0">שומרים קובץ ופותחים אותו במכשיר השני. איפה לשמור: באייפון ב"קבצים" (iCloud), באנדרואיד ב-Drive, או בוואטסאפ או במייל לעצמך.</p>
+      <p class="muted" style="margin:0 0 6px">⚠ בקובץ יש את כל הנתונים שלך, כולל תיאורי פעולות מהבנק. שלח אותו רק לעצמך.</p>
       <p class="muted" style="margin:0">גיבוי אחרון: <b>${meta.backup ? new Date(meta.backup).toLocaleDateString('he-IL') : 'עוד לא נשמר'}</b></p>
-      <div class="row"><button class="pri" id="doBackup">⬇ שמור גיבוי לקובץ</button><button class="ghost" id="doRestore">⬆ פתח קובץ גיבוי</button></div>
+      <div class="row"><button class="pri" id="doBackup">⬇ שמור גיבוי לקובץ</button><button class="ghost" id="doRestore">⬆ פתח קובץ גיבוי</button></div></details>
       ${autoBox()}
       <div id="snapList"><span class="muted">טוען עותקים אוטומטיים…</span></div>
     </section>
@@ -567,11 +570,53 @@
       <p class="muted" style="margin:0">שנים קיימות: ${esc(ys.join(', '))}</p>
       <div class="row"><button class="ghost" id="newYear">＋ פתח שנה חדשה</button></div>
     </section></div>` + renderSecEditor() + renderCatEditor() + `
+    ${renderHelp()}
     <section class="box stack"><h3>התחלה מחדש</h3>
       <p class="muted" style="margin:0">מוחק את כל הנתונים מהמכשיר הזה וחוזר למסך הפתיחה. כדאי לשמור גיבוי לפני.</p>
       <div class="row"><button class="danger" id="wipe">מחק הכל והתחל מחדש</button></div>
     </section>
     <p class="small">תקציב שנתי הוא כלי מעקב אישי, לא ייעוץ פיננסי. אין שרת: הנתונים לא נשלחים לשום מקום. · גרסה ${window.BUILD ? window.BUILD.n : ''} · אחסון: ${Store.mode === 'idb' ? 'IndexedDB' : 'localStorage'}</p>`;
+  }
+  const HELP = [
+    ['איך מתחילים?', 'נכנסים לחודש הנוכחי וממלאים הכנסות והוצאות. בטלפון לוחצים על ＋ להוספה מהירה. אפשר גם לטעון קובץ מהבנק או מחברת האשראי ("טען קובץ לחודש הזה").'],
+    ['איך מעבירים בין הטלפון למחשב?', 'בהגדרות, ב"גיבוי וסנכרון": מתחברים לאותו חשבון ענן בשני המכשירים, ומאז הכל מסתנכרן לבד. בלי חשבון: שומרים קובץ גיבוי ופותחים אותו במכשיר השני.'],
+    ['מה זה "משוער"?', 'כשחודש חדש נפתח לבד, הסכומים הקבועים מועתקים מהחודש הקודם ומסומנים "משוער" עד שמעדכנים אותם.'],
+    ['טעיתי. איך מבטלים?', 'כפתור ↶ למעלה מבטל את השינוי האחרון. בהגדרות יש גם עותקים אוטומטיים מכל יום ומלפני כל פעולה גדולה.'],
+    ['האפליקציה מתעדכנת?', 'כן, לבד, ברגע שלא עורכים כלום. לפני כל עדכון הנתונים נשמרים ונשמר עותק.'],
+    ['מי רואה את הנתונים שלי?', 'רק אתה. הם נשמרים במכשיר, ואם בחרת סנכרון, גם בתיקייה פרטית בחשבון הענן שלך. אין לנו שרת, ושום דבר לא נשלח אלינו.'],
+    ['זה עובד בלי אינטרנט?', 'כן. אחרי הפתיחה הראשונה הכל עובד גם בלי רשת, והסנכרון ממשיך כשהחיבור חוזר.']
+  ];
+  const renderHelp = () => `<section class="box stack" id="helpBox"><h3>❓ עזרה</h3>${HELP.map(q => `<details class="faq"><summary>${q[0]}</summary><p>${q[1]}</p></details>`).join('')}
+    <div class="row"><button class="ghost" data-guide="show">הצג שוב את "צעדים ראשונים"</button></div></section>`;
+  // first steps for new users: a short checklist on the month and summary screens
+  function guideCard() {
+    const meta = Store.meta();
+    if (meta.guideOff || staleTab) return '';
+    const ms = C.chainMonths(S).map(x => calc(x.m));
+    const steps = [
+      ['install', '📲', 'להתקין כאפליקציה', 'נפתחת מאייקון ועובדת בלי אינטרנט', Store.isStandalone() || !!meta.installed],
+      ['month', '💰', 'להזין הכנסה', 'משכורת או כל הכנסה אחרת', ms.some(c => c.income > 0)],
+      ['import', '🧾', 'להוסיף הוצאות', 'ידנית, או קובץ מהבנק או מהאשראי', ms.some(c => c.expense > 0)],
+      ['backup', '☁', 'לחבר סנכרון או גיבוי', 'כדי שהנתונים יעברו בין מכשירים ולא יאבדו', !!(window.Cloud && window.Cloud.on) || !!meta.backup || autoState === 'on'],
+      ['look', '🎨', 'להתאים צבע וגודל טקסט', 'בהגדרות', !!meta.seenSettings]
+    ];
+    const done = steps.filter(x => x[4]).length;
+    if (done === steps.length) return `<section class="box guide"><div class="row" style="justify-content:space-between"><b>🎉 הכל מוכן! אפשר להשתמש.</b><button class="sm ghost" data-guide="off">סגור</button></div></section>`;
+    return `<section class="box guide"><div class="row" style="justify-content:space-between"><h3 style="margin:0">👋 צעדים ראשונים <small class="muted">${done} מתוך ${steps.length}</small></h3><button class="sm ghost" data-guide="off">הסתר</button></div>
+      <div class="bar"><i style="width:${done / steps.length * 100}%"></i></div>
+      <ul class="steps">${steps.map(x => `<li class="${x[4] ? 'done' : ''}"><span class="ck" aria-hidden="true">${x[4] ? '✓' : x[1]}</span><span class="grow"><b>${x[2]}</b><small>${x[3]}</small></span>${x[4] ? '' : `<button class="sm" data-guide="${x[0]}">${x[0] === 'install' && installEvt ? 'התקן' : 'בוא'}</button>`}</li>`).join('')}</ul></section>`;
+  }
+  function guideGo(g) {
+    const cur = C.currentMonth(S, new Date());
+    const toMonth = () => { if (S.years[cur.y] && S.years[cur.y].months[cur.k]) { ui.year = cur.y; ui.tab = cur.k; } else if (typeof ui.tab !== 'number') { const lm = lastMonth(); if (lm != null) ui.tab = lm; } };
+    const toSettings = id => { ui.tab = 'settings'; render(); const el = id && $('#' + id); if (el) el.scrollIntoView({ block: 'start', behavior: 'smooth' }); else scrollTo(0, 0); };
+    if (g === 'off') { Store.setMeta({ guideOff: 1 }); render(); return; }
+    if (g === 'show') { Store.setMeta({ guideOff: 0 }); toMonth(); render(); scrollTo(0, 0); return; }
+    if (g === 'install') { if (installEvt) $('#hdrInstall').click(); else toSettings('installBox'); return; }
+    if (g === 'backup') return toSettings('syncBox');
+    if (g === 'look') return toSettings(null);
+    toMonth(); render();
+    if (g === 'import') { const b = $('#importHere'); if (b) b.click(); }
   }
   function autoBox() {
     const meta = Store.meta();
@@ -610,14 +655,16 @@
       extra += `<div class="banner ok"><span class="grow">✨ <b>מה חדש:</b> ${news.map(x => esc(x.text)).join(' ')}</span><button class="sm ghost" id="newsOk">הבנתי</button></div>`;
     else if (B && meta.seenBuild != null && meta.seenBuild < B.n) Store.setMeta({ seenBuild: B.n });
     const remindDays = Store.isMobile() ? 7 : 14;
-    const autoFresh = autoState === 'on' && meta.autoBackup && Date.now() - meta.autoBackup < 3 * 864e5;
+    const autoFresh = (autoState === 'on' && meta.autoBackup && Date.now() - meta.autoBackup < 3 * 864e5) || (window.Cloud && window.Cloud.fresh());
+    if (window.Cloud) extra += window.Cloud.banner();
     if (anyData && used && !autoFresh && ui.tab !== 'settings' && (!meta.backup || Date.now() - meta.backup > remindDays * 864e5) && meta.remindOff !== new Date().toISOString().slice(0, 10))
       extra += `<div class="banner warn"><span class="grow">${meta.backup ? `עבר יותר מ-${remindDays === 7 ? 'שבוע' : 'שבועיים'} מהגיבוי האחרון.` : 'עוד לא שמרת גיבוי.'} הנתונים שמורים רק במכשיר הזה.</span><button class="sm" id="doBackup">⬇ שמור גיבוי</button><button class="sm ghost" id="remindOff">מחר</button></div>`;
     if (Store.isIOS() && !Store.isStandalone() && ui.tab !== 'settings' && !meta.iosTipOff)
       extra += `<div class="banner info"><span class="grow">📲 באייפון כדאי להוסיף את האפליקציה למסך הבית (שיתוף ⬆ ← "הוסף למסך הבית"), כדי שהנתונים יישמרו לאורך זמן.</span><button class="sm ghost" id="iosTipOff">הבנתי</button></div>`;
-    if (ui.tab === 'summary') main.innerHTML = staleBar + nb + extra + renderYear();
+    if (ui.tab === 'settings' && !meta.seenSettings) Store.setMeta({ seenSettings: 1 });
+    if (ui.tab === 'summary') main.innerHTML = staleBar + nb + extra + guideCard() + renderYear();
     else if (ui.tab === 'settings') { main.innerHTML = staleBar + nb + renderSettings(); fillSnapList(); }
-    else main.innerHTML = staleBar + nb + extra + renderMonth(ui.tab);
+    else main.innerHTML = staleBar + nb + extra + guideCard() + renderMonth(ui.tab);
     main.classList.toggle('ro', staleTab);
     $('#fab').hidden = !(phone() && typeof ui.tab === 'number' && curM());
   }
@@ -1048,6 +1095,7 @@
     if (t.id === 'autoChoose') { try { const n = await Store.autoChoose(S); autoState = 'on'; render(); tell('מעכשיו כל שינוי נשמר לבד גם לקובץ "' + n + '". אם שמרת אותו בתוך תיקיית OneDrive או Google Drive, הוא מגובה גם בענן.\nאחרי כל פתיחה של האפליקציה הדפדפן יבקש אישור בלחיצה אחת.'); } catch (e) { if (!e || e.name !== 'AbortError') tell('לא הצלחתי ליצור קובץ גיבוי: ' + (e && e.message)); } return; }
     if (t.id === 'autoOffBtn') { await Store.autoOff(); autoState = 'off'; render(); setStatus('הגיבוי האוטומטי כובה'); return; }
     if (t.id === 'newsOk') { Store.setMeta({ seenBuild: window.BUILD.n }); render(); return; }
+    if (t.dataset.guide) { guideGo(t.dataset.guide); return; }
     if (t.id === 'iosTipOff') { Store.setMeta({ iosTipOff: 1 }); render(); return; }
     if (t.id === 'autoOk') { autoNote = null; render(); return; }
     if (t.id === 'autoUndo') {
@@ -1161,7 +1209,7 @@
   }
 
   window.App = {
-    get S() { return S; }, ui, MN, esc, money, fmt, I, ask, tell, setStatus, start, render, pushUndo, queueSave, recompute, curM, Y, openMonth,
+    get S() { return S; }, get ro() { return staleTab; }, ui, MN, esc, money, fmt, I, ask, tell, setStatus, start, render, pushUndo, queueSave, recompute, curM, Y, openMonth,
     catName, sec, flushSave, saveNow, place, get UNDO() { return UNDO; }, undo, redo, evalExpr, numVal, applyLook, phone
   };
   btns();

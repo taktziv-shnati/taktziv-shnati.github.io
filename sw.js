@@ -1,10 +1,10 @@
 // Offline support: the app's own files are cached, so it opens without internet. No data passes through here.
 // Every release raises BUILD (here, in js/build.js and in the ?v= of index.html: bump.js does all three),
 // so the browser installs the new files and the app refreshes itself. Touch only caches that start with b4a-.
-const BUILD = 6;
+const BUILD = 7;
 const VERSION = 'b4a-' + BUILD, V = '?v=' + BUILD;
 const PAGE = ['./', 'index.html'];
-const FILES = PAGE.concat(['css/styles.css', 'js/build.js', 'js/calc.js', 'js/demo.js', 'js/store.js', 'js/importer.js', 'js/app.js', 'js/wizard.js', 'js/import-ui.js', 'js/update.js',
+const FILES = PAGE.concat(['css/styles.css', 'js/build.js', 'js/calc.js', 'js/demo.js', 'js/store.js', 'js/importer.js', 'js/app.js', 'js/wizard.js', 'js/import-ui.js', 'js/cloud.js', 'js/update.js',
   'vendor/xlsx.full.min.js'].map(f => f + V), ['manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png']);
 // install: every file fresh from the server; a page or build.js from an older release (a CDN edge that has not caught up)
 // fails the install, and the browser tries again on its next update check, so the offline copy is never a mix of versions
