@@ -1,7 +1,7 @@
 // Offline support: the app's own files are cached, so it opens without internet. No data passes through here.
 // Every release raises BUILD (here, in js/build.js and in the ?v= of index.html: bump.js does all three),
 // so the browser installs the new files and the app refreshes itself. Touch only caches that start with b4a-.
-const BUILD = 9;
+const BUILD = 10;
 const VERSION = 'b4a-' + BUILD, V = '?v=' + BUILD;
 const PAGE = ['./', 'index.html'];
 const FILES = PAGE.concat(['css/styles.css', 'js/build.js', 'js/calc.js', 'js/demo.js', 'js/store.js', 'js/importer.js', 'js/app.js', 'js/wizard.js', 'js/import-ui.js', 'js/cloud.js', 'js/update.js',

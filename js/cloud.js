@@ -39,7 +39,10 @@
       authUrl: (q, paste) => 'https://www.dropbox.com/oauth2/authorize?' + qs({ client_id: CFG.dropbox, response_type: 'code', code_challenge: q.ch, code_challenge_method: 'S256', token_access_type: 'offline', state: paste ? null : q.state, redirect_uri: paste ? null : redirect() }),
       async token(body) {
         const r = await http('https://api.dropboxapi.com/oauth2/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: qs(Object.assign({ client_id: CFG.dropbox }, body)) });
-        if (!r.ok) throw fail('Dropbox לא אישר את החיבור', true);
+        if (!r.ok) {
+          let d = ''; try { const e = await r.json(); d = [e.error, e.error_description].filter(Boolean).join(': '); } catch (_) { /* ignore */ }
+          throw fail('Dropbox לא אישר את החיבור' + (d ? ' (' + d.slice(0, 120) + ')' : ' (' + r.status + ')'), true);
+        }
         const j = await r.json();
         return { access: j.access_token, exp: Date.now() + (j.expires_in || 14400) * 1000 - 60e3, refresh: j.refresh_token };
       },
