@@ -90,7 +90,7 @@
     try { return { data: JSON.parse(txt) }; }
     catch (e) {
       // damaged: keep it aside and come back from the newest automatic copy
-      try { await set('damaged-' + Date.now(), txt); } catch (_) { /* ignore */ }
+      try { await set('damaged-' + Date.now(), txt); await prune('damaged-', 3); } catch (_) { /* ignore */ }
       const s = (await snapshots())[0];
       return { data: s ? s.data : null, message: 'הנתונים השמורים נפגמו, ולכן נטען העותק האוטומטי האחרון' + (s ? ' (' + new Date(s.time).toLocaleString('he-IL') + ')' : '') + '.' };
     }
@@ -139,7 +139,7 @@
   }
   async function snapshots() {
     try {
-      const ks = (await keys()).filter(k => k.startsWith('snap-') || k.startsWith('before-') || k.startsWith('upd-'));
+      const ks = (await keys()).filter(k => k.startsWith('snap-') || k.startsWith('before-') || k.startsWith('upd-') || k.startsWith('bad-'));
       const out = [];
       for (const k of ks) { try { const v = JSON.parse(await get(k)); v.key = k; out.push(v); } catch (_) { /* skip */ } }
       return out.sort((a, b) => b.time - a.time);
@@ -187,6 +187,8 @@
         }
       }
     }
+    // the iPhone home-screen app has no downloads (a download would replace the app's screen): the text is copied instead
+    if (isIOS() && isStandalone()) return { ok: false, copyText: txt, name };
     const blob = new Blob([txt], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob); a.download = name;

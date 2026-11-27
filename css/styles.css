@@ -40,12 +40,12 @@ header button:disabled{opacity:.4;cursor:default}
 header .lbl{margin-inline-start:4px}
 #status{font-size:.8rem;opacity:.95;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px}
 #status.err{color:#ffd0d0;font-weight:700}
-nav{display:flex;gap:6px;padding:10px 14px 8px;max-width:1480px;margin:auto;overflow-x:auto;scrollbar-width:none;background:var(--bg)}
+nav{display:flex;gap:6px;padding:10px max(14px,env(safe-area-inset-right)) 8px max(14px,env(safe-area-inset-left));max-width:1480px;margin:auto;overflow-x:auto;scrollbar-width:none;background:var(--bg)}
 nav::-webkit-scrollbar{display:none}
 nav button{flex:0 0 auto;border:1px solid var(--line);background:var(--card);padding:6px 12px;border-radius:999px;cursor:pointer;min-height:34px}
 nav button.on{background:var(--pri);color:#fff;border-color:var(--pri)}
 nav button.empty{color:var(--mut);border-style:dashed}
-main{max-width:1480px;margin:auto;padding:6px 14px 110px}
+main{max-width:1480px;margin:auto;padding:6px max(14px,env(safe-area-inset-right)) 110px max(14px,env(safe-area-inset-left))}
 @media(max-width:759px){
   header .lbl,header h1 .full{display:none}
   header{gap:4px;padding-inline:10px}
@@ -83,7 +83,7 @@ main{max-width:1480px;margin:auto;padding:6px 14px 110px}
 .kpi.neg b{color:var(--bad)}.kpi.pos b{color:var(--ok)}
 .kpi small.sub{font-size:.75rem;margin-top:2px}
 button.kpi{font:inherit;color:inherit;cursor:pointer;width:100%}
-.ibtn{border:1px solid var(--line);background:var(--card);border-radius:999px;width:22px;height:22px;font-size:.75rem;cursor:pointer;color:var(--mut);padding:0;vertical-align:1px;margin-inline-start:4px}
+.ibtn{position:relative;border:1px solid var(--line);background:var(--card);border-radius:999px;width:22px;height:22px;font-size:.75rem;cursor:pointer;color:var(--mut);padding:0;vertical-align:1px;margin-inline-start:4px}
 
 /* sections grid: two columns on wide screens, like the desktop app */
 .secgrid{display:grid;grid-template-columns:minmax(0,1fr);gap:0 14px}
@@ -102,7 +102,7 @@ button.kpi{font:inherit;color:inherit;cursor:pointer;width:100%}
 .pr .calc{justify-content:flex-start}
 input,select,textarea{width:100%;min-width:0;padding:7px 8px;border:1px solid var(--line);border-radius:8px;background:var(--in)}
 input:focus,select:focus,textarea:focus{outline:2px solid color-mix(in srgb,var(--pri) 35%,transparent);border-color:var(--pri)}
-@media(max-width:759px){input,select,textarea{font-size:max(16px,1rem)}}
+@media(max-width:759px),(pointer:coarse){input,select,textarea{font-size:max(16px,1rem)}}
 input[type=checkbox]{width:20px;height:20px;padding:0;accent-color:var(--pri)}
 .num{direction:ltr;text-align:left;font-variant-numeric:tabular-nums}
 .cur{position:relative;display:block}
@@ -241,7 +241,8 @@ main.ro input,main.ro select{pointer-events:none;opacity:.65}
 /* import */
 .maptbl{font-size:.8rem;table-layout:fixed;min-width:480px}
 .maptbl td,.maptbl th{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:140px}
-.maptbl select{font-size:.8rem;padding:4px}
+.maptbl select{padding:4px}
+@media(pointer:fine){.maptbl select{font-size:.8rem}}
 .rv{display:flex;flex-direction:column;gap:8px}
 .rvi{border:1px solid var(--line);border-radius:10px;padding:9px 11px;display:flex;flex-direction:column;gap:6px}
 .rvi.warn{border-color:var(--warn)}
@@ -264,3 +265,10 @@ main.ro input,main.ro select{pointer-events:none;opacity:.65}
 .faq{border-bottom:1px solid var(--line);padding:6px 0}.faq summary{cursor:pointer;font-weight:600;padding:4px 0}.faq p{margin:4px 0 6px;color:var(--mut)}
 .cloudopts{display:flex;flex-wrap:wrap;gap:8px}.cloudopts button{flex:1;min-width:140px}
 .steps li.done{padding:4px 10px}.steps li.done small{display:none}.steps li.done .ck{width:22px;height:22px;font-size:.8rem}
+
+/* finger-size tap areas on touch screens (the look stays the same) */
+.ibtn::after{content:'';position:absolute;inset:-7px}
+@media(pointer:coarse){button.del,button.more{min-width:42px;height:42px}.edr .ctl button,.icb{min-width:42px;height:42px}nav button{min-height:40px}}
+/* the page behind an open dialog does not scroll (iPhone ignores overflow:hidden on body) */
+.modal{overscroll-behavior:contain}
+html:has(.modal:not([hidden])){overflow:hidden}

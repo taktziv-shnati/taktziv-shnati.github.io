@@ -10,7 +10,7 @@
   const FILE = 'budget.json', K = 'budget4all.cloud', REQ = 'b4a.oauthReq', RES = 'b4a.oauthRes';
   const A = () => window.App, C = () => window.BudgetCalc, Store = () => window.BudgetStore;
   const redirect = () => new URL('oauth.html', location.href).href;
-  let st = load(), busy = false, timer = null, status = st.prov ? 'idle' : 'off', err = '', fails = 0, conflicts = 0, lastPull = 0;
+  let st = load(), busy = false, again = false, againForce = false, timer = null, status = st.prov ? 'idle' : 'off', err = '', fails = 0, conflicts = 0, lastPull = 0, snooze = 0, retried = false;
 
   function load() { try { return JSON.parse(localStorage.getItem(K) || '{}'); } catch (_) { return {}; } }
   function keep() { try { localStorage.setItem(K, JSON.stringify(st)); } catch (_) { /* ignore */ } }
@@ -21,7 +21,8 @@
   async function http(url, opt, what) {
     let r;
     try { r = await fetch(url, opt); } catch (_) { throw fail('אין חיבור לאינטרנט'); }
-    if (r.status === 401) throw fail('צריך להתחבר מחדש', true);
+    if (r.status === 401) { const e = fail('צריך להתחבר מחדש', true); e.api = true; throw e; }
+    if (r.status === 429 || r.status >= 500) throw fail('השירות עמוס כרגע, ננסה שוב בעוד רגע');
     return r;
   }
   // a fingerprint of the data, without the field that only says which build saved it
@@ -40,8 +41,9 @@
       async token(body) {
         const r = await http('https://api.dropboxapi.com/oauth2/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: qs(Object.assign({ client_id: CFG.dropbox }, body)) });
         if (!r.ok) {
-          let d = ''; try { const e = await r.json(); d = [e.error, e.error_description].filter(Boolean).join(': '); } catch (_) { /* ignore */ }
-          throw fail('Dropbox לא אישר את החיבור' + (d ? ' (' + d.slice(0, 120) + ')' : ' (' + r.status + ')'), true);
+          let d = '', code = ''; try { const e = await r.json(); code = e.error || ''; d = [e.error, e.error_description].filter(Boolean).join(': '); } catch (_) { /* ignore */ }
+          // a rejected code or refresh token means signing in again; anything else (busy, server error) is retried later
+          throw fail('Dropbox לא אישר את החיבור' + (d ? ' (' + d.slice(0, 120) + ')' : ' (' + r.status + ')'), r.status === 400 || r.status === 401 || /invalid_grant|invalid_client/.test(code));
         }
         const j = await r.json();
         return { access: j.access_token, exp: Date.now() + (j.expires_in || 14400) * 1000 - 60e3, refresh: j.refresh_token };
@@ -62,7 +64,11 @@
       async put(a, txt, m) {
         const arg = { path: '/' + FILE, mode: m ? { '.tag': 'update', update: m.rev } : 'add', mute: true, autorename: false };
         const r = await http('https://content.dropboxapi.com/2/files/upload', { method: 'POST', headers: { Authorization: 'Bearer ' + a, 'Content-Type': 'application/octet-stream', 'Dropbox-API-Arg': JSON.stringify(arg) }, body: txt });
-        if (r.status === 409) { const e = fail('השתנה במקביל'); e.conflict = true; throw e; }
+        if (r.status === 409) {
+          let t = ''; try { t = JSON.stringify(await r.json()); } catch (_) { /* ignore */ }
+          if (/insufficient_space/.test(t)) throw fail('אין מקום פנוי ב-Dropbox');
+          const e = fail('השתנה במקביל'); e.conflict = true; throw e;
+        }
         if (!r.ok) throw fail('Dropbox: לא הצלחתי לשמור');
         return (await r.json()).rev;
       },
@@ -104,21 +110,35 @@
   const available = () => Object.keys(P).filter(id => CFG[id]);
 
   /* ---------- connecting ---------- */
+  // the PKCE pair is made ahead of time, so the sign-in window opens inside the tap itself (iPhone blocks it after an await)
+  let pre = null;
+  async function prep() { const ver = rnd(48); pre = { ver, ch: b64u(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(ver))) }; }
+  prep().catch(() => {});
   async function connect(id) {
     const app = A();
     if (!usable(id)) return;
-    const ver = rnd(48), q = { prov: id, state: rnd(16), ver, ch: b64u(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(ver))), t: Date.now() };
-    try { localStorage.setItem(REQ, JSON.stringify(q)); localStorage.removeItem(RES); } catch (_) { /* ignore */ }
+    if (!pre) await prep();
+    const k = pre; pre = null; prep().catch(() => {});
     const paste = id === 'dropbox' && isIOSApp();
+    const q = { prov: id, state: rnd(16), ver: k.ver, ch: k.ch, t: Date.now(), paste };
     const url = P[id].authUrl(q, paste);
-    if (paste) {
-      window.open(url, '_blank');
-      const v = await app.ask('אחרי האישור ב-Dropbox מופיע קוד. העתק אותו, חזור לכאן והדבק:', { ok: 'התחבר', html: '<input name="code" autocomplete="off" autocapitalize="off" spellcheck="false" style="width:100%" placeholder="הקוד מ-Dropbox">', focus: 'input' });
-      if (v && v.code) await finish({ prov: id, code: v.code.trim(), paste: true });
-      return;
-    }
-    const w = window.open(url, 'b4a-oauth', 'width=520,height=700');
+    const w = paste ? window.open(url, '_blank') : window.open(url, 'b4a-oauth', 'width=520,height=700');
+    q.win = paste ? 'paste' : w ? 'popup' : 'same';
+    try { localStorage.setItem(REQ, JSON.stringify(q)); localStorage.removeItem(RES); } catch (_) { /* ignore */ }
+    if (paste) return askCode(url);
     if (!w) { await app.saveNow(); location.href = url; } // popups blocked: go in the same window, come back to oauth.html → the app
+  }
+  // iPhone home-screen app: Dropbox shows a code and the user pastes it here. The link is in the dialog too
+  // (if the window did not open, or the app was reloaded while the user was in Safari).
+  async function askCode(url) {
+    const v = await A().ask('אחרי האישור ב-Dropbox מופיע קוד. העתק אותו, חזור לכאן והדבק:', { ok: 'התחבר', html: `<p style="margin:0 0 8px"><a href="${A().esc(url)}" target="_blank" rel="noopener">פתיחת Dropbox ↗</a></p><input name="code" autocomplete="off" autocapitalize="off" spellcheck="false" style="width:100%" placeholder="הקוד מ-Dropbox">`, focus: 'input' });
+    if (v && v.code) await finish({ prov: 'dropbox', code: v.code.trim(), paste: true });
+    else if (!v) { try { localStorage.removeItem(REQ); } catch (_) { /* ignore */ } } // canceled: not asked again on the next start
+  }
+  function resumeCode() {
+    let q = null; try { q = JSON.parse(localStorage.getItem(REQ) || 'null'); } catch (_) { /* ignore */ }
+    if (!q || !q.paste || Date.now() - q.t > 15 * 60e3 || !isIOSApp()) return;
+    askCode(P.dropbox.authUrl(q, true));
   }
   // the sign-in window (oauth.html) leaves its answer in localStorage
   async function takeResult() {
@@ -140,7 +160,7 @@
       const tok = r.access ? { access: r.access, exp: Date.now() + r.expires * 1000 - 60e3 } : await P[r.prov].exchange(r.code, q, r.paste);
       const same = st.prov === r.prov;
       st = same ? Object.assign(st, { tok }) : { prov: r.prov, tok }; // a new account starts without a base: the first sync compares
-      keep(); status = 'idle'; fails = 0;
+      keep(); status = 'idle'; fails = 0; retried = false;
       A().setStatus('מחובר ל-' + P[r.prov].name + ' ✓');
       await sync(true);
     } catch (e) { A().tell('החיבור ל-' + P[r.prov].name + ' לא הצליח: ' + e.message); }
@@ -169,13 +189,16 @@
   async function upload(S, m) {
     const tok = await access(); if (!tok) throw fail('צריך להתחבר מחדש', true);
     if (window.BUILD) S.writtenBy = window.BUILD.n;
-    st.base = await P[st.prov].put(tok, JSON.stringify(S), m);
-    st.hash = hashOf(S); keep();
+    // the fingerprint is of what is sent now: an edit made while it uploads stays "changed" and goes up next
+    const txt = JSON.stringify(S), h = hashOf(JSON.parse(txt));
+    st.base = await P[st.prov].put(tok, txt, m);
+    st.hash = h; keep();
   }
   async function sync(force) {
     const app = A();
-    if (busy || !st.prov || !app || app.ro || !navigator.onLine) return;
-    busy = true; const was = status; status = 'sync';
+    if (!st.prov || !app || app.ro || !navigator.onLine) return;
+    if (busy) { again = true; againForce = againForce || !!force; return; } // a change or a tap during a sync: one more round right after it
+    busy = true; again = false; const was = status; status = 'sync';
     try {
       const tok = await access();
       if (!tok) { status = 'auth'; return; }
@@ -183,23 +206,35 @@
       lastPull = Date.now();
       if (m && m.rev !== st.base) {
         let remote; try { remote = JSON.parse(await prov.get(tok, m)); } catch (_) { remote = null; }
+        if (remote && +remote.v > C().DATA_V) { status = 'update'; if (window.BudgetUpdate) window.BudgetUpdate.check(); return; }
         if (!remote || !C().isValid(remote)) throw fail('הקובץ בענן פגום');
-        if (+remote.v > C().DATA_V) { status = 'update'; if (window.BudgetUpdate) window.BudgetUpdate.check(); return; }
+        const dirtyNow = !!app.S && hashOf(app.S) !== st.hash; // an edit made during the download counts too
         if (S && hashOf(remote) === hashOf(S)) { st.base = m.rev; st.hash = hashOf(S); keep(); }
-        else if (!dirty) await apply(remote, m);
+        else if (!dirty && !dirtyNow) await apply(remote, m);
         else {
-          const v = await app.ask('יש שינויים שונים במכשיר הזה ובמכשיר אחר. איזו גרסה להמשיך? הגרסה השנייה תישמר כעותק בהגדרות, כך ששום דבר לא נמחק.', { ok: 'מהמכשיר האחר', cancel: 'מהמכשיר הזה' });
-          if (v) await apply(remote, m);
-          else { await Store().snapshotBefore(remote, 'גרסה מהמכשיר האחר (סנכרון)'); await upload(app.S, m); }
+          // both changed: only a clear choice decides. Closing the dialog = decide later (nothing is overwritten).
+          // An automatic round does not interrupt another open dialog, and waits 10 minutes after "later".
+          const modal = document.getElementById('modal');
+          if (!force && ((modal && !modal.hidden) || Date.now() - snooze < 10 * 60e3)) { status = 'conflict'; return; }
+          const v = await app.ask('יש שינויים שונים במכשיר הזה ובמכשיר אחר. איזו גרסה להמשיך? הגרסה השנייה תישמר כעותק בהגדרות, כך ששום דבר לא נמחק.', { ok: '📥 מהמכשיר האחר', cancel: 'אחר כך', html: '<button type="button" class="pri" data-extra="local" style="width:100%">📱 מהמכשיר הזה</button>' });
+          if (v === true) await apply(remote, m);
+          else if (v && v._action === 'local') { await Store().snapshotBefore(remote, 'גרסה מהמכשיר האחר (סנכרון)'); await upload(app.S, m); }
+          else { snooze = Date.now(); status = 'conflict'; return; }
+          snooze = 0;
         }
       } else if (S && (dirty || !m)) await upload(S, m);
-      status = 'ok'; fails = 0; conflicts = 0; err = ''; st.last = Date.now(); keep();
+      status = 'ok'; fails = 0; conflicts = 0; err = ''; retried = false; st.last = Date.now(); keep();
     } catch (e) {
       if (e.conflict && ++conflicts < 3) { busy = false; status = was; setTimeout(sync, 1500); return; } // changed meanwhile on another device: read it first
-      status = e.auth ? 'auth' : 'err'; err = e.message; fails++;
+      // the access token was refused before its time: renew it once with the refresh token, then try again
+      if (e.api && !retried && st.tok && st.tok.refresh) { retried = true; st.tok.exp = 0; busy = false; status = was; setTimeout(() => sync(force), 0); return; }
+      status = e.auth ? 'auth' : 'err'; err = e.message; fails++; if (!e.api) retried = false;
     } finally {
-      busy = false;
-      if (status !== was && A()) { if (A().ui.tab === 'settings' || status === 'auth' || fails > 2) A().render(); }
+      if (busy) {
+        busy = false;
+        if (status !== was && A()) { if (A().ui.tab === 'settings' || status === 'auth' || status === 'conflict' || fails > 2) A().render(); }
+        if (again) { const f = againForce; again = false; againForce = false; setTimeout(() => sync(f), 300); }
+      }
     }
   }
   // after every save on this device (called by app.js); a few seconds later, so typing is not interrupted
@@ -214,7 +249,7 @@
   window.addEventListener('online', () => sync());
   setInterval(() => { if (!document.hidden && Date.now() - lastPull > 85e3) sync(); }, 30e3);
   // first sync once the app has started
-  const wait = setInterval(() => { const a = A(); if (a && (a.S || document.querySelector('.wiz'))) { clearInterval(wait); takeResult().then(() => sync()); } }, 300);
+  const wait = setInterval(() => { const a = A(); if (a && (a.S || document.querySelector('.wiz'))) { clearInterval(wait); resumeCode(); takeResult().then(() => sync()); } }, 300);
 
   document.addEventListener('click', e => {
     const b = e.target.closest('[data-cloud]'); if (!b) return;
@@ -231,7 +266,7 @@
     const ids = available();
     if (st.prov && P[st.prov]) {
       const p = P[st.prov];
-      const line = status === 'auth' ? '<span class="neg">צריך להתחבר מחדש</span>' : status === 'err' && fails > 1 ? '<span class="neg">' + esc(err) + '</span>' : status === 'update' ? 'יש גרסה חדשה יותר, מתעדכן…' : st.last ? 'סונכרן ' + new Date(st.last).toLocaleString('he-IL', { dateStyle: 'short', timeStyle: 'short' }) : 'מסתנכרן…';
+      const line = status === 'auth' ? '<span class="neg">צריך להתחבר מחדש</span>' : status === 'err' && fails > 1 ? '<span class="neg">' + esc(err) + '</span>' : status === 'update' ? 'יש גרסה חדשה יותר, מתעדכן…' : status === 'conflict' ? '<span class="neg">ממתין לבחירה בין הגרסאות</span>' : st.last ? 'סונכרן ' + new Date(st.last).toLocaleString('he-IL', { dateStyle: 'short', timeStyle: 'short' }) : 'מסתנכרן…';
       return `<div class="install"><b>☁ מסונכרן עם ${p.icon} ${p.name}</b><p style="margin:4px 0 8px">${line}<br><small>כל שינוי עובר לבד לכל מכשיר שמחובר לאותו חשבון.</small></p>
         <div class="row">${status === 'auth' ? '<button class="pri" data-cloud="reauth">התחבר מחדש</button>' : '<button class="ghost" data-cloud="now">סנכרן עכשיו</button>'}<button class="ghost" data-cloud="off">נתק</button></div></div>`;
     }
@@ -245,6 +280,7 @@
   function banner() {
     if (!st.prov) return '';
     if (status === 'auth') return `<div class="banner info"><span class="grow">☁ כדי לסנכרן עם ${P[st.prov].name}, צריך להתחבר שוב (לחיצה אחת).</span><button class="sm pri" data-cloud="reauth">התחבר</button></div>`;
+    if (status === 'conflict') return `<div class="banner warn"><span class="grow">☁ יש שינויים שונים כאן ובמכשיר אחר. צריך לבחור איזו גרסה להמשיך.</span><button class="sm pri" data-cloud="now">לבחירה</button></div>`;
     if (status === 'err' && fails > 2) return `<div class="banner warn"><span class="grow">☁ הסנכרון לא הצליח (${esc(err)}). הנתונים שמורים במכשיר.</span><button class="sm" data-cloud="now">נסה שוב</button></div>`;
     return '';
   }

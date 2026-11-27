@@ -72,14 +72,20 @@
     if (typeof v === 'number' && v > 20000 && v < 80000) { const d = new Date(Math.round((v - 25569) * 864e5)); return new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()); }
     const s = norm(v);
     let m = s.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})/);
-    if (m) { let y = +m[3]; if (y < 100) y += 2000; const d = new Date(y, +m[2] - 1, +m[1]); return isNaN(d) ? null : d; }
+    if (m) {
+      let y = +m[3], dd = +m[1], mm = +m[2]; if (y < 100) y += 2000;
+      if (mm > 12 && dd <= 12) [dd, mm] = [mm, dd]; // an American month/day file
+      if (mm < 1 || mm > 12 || dd < 1 || dd > 31) return null;
+      const d = new Date(y, mm - 1, dd); return isNaN(d) || d.getMonth() !== mm - 1 ? null : d;
+    }
     m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
-    if (m) return new Date(+m[1], +m[2] - 1, +m[3]);
+    if (m) { const d = new Date(+m[1], +m[2] - 1, +m[3]); return d.getMonth() === +m[2] - 1 && d.getDate() === +m[3] ? d : null; }
     return null;
   }
   function parseNum(v) {
     if (typeof v === 'number') return v;
-    let s = norm(v).replace(/[₪$€,\s]|ש"ח|ILS|NIS/gi, '');
+    // a typographic minus or dash, and the invisible direction marks that Hebrew exports add, count as plain text
+    let s = norm(v).replace(/[\u2212\u2012\u2013\u2014\uFE63\uFF0D]/g, '-').replace(/[\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, '').replace(/[₪$€,\s]|ש["״]ח|ILS|NIS/gi, '');
     if (!s) return null;
     let neg = false;
     if (/^\(.*\)$/.test(s)) { neg = true; s = s.slice(1, -1); }

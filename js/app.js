@@ -228,6 +228,7 @@
 
   /* ---------- start ---------- */
   async function start(data, opts = {}) {
+    if (+data.v > C.DATA_V) return needUpdate(); // from a newer version (restore, another window, the cloud): never opened or saved over
     const before = opts.fresh ? null : JSON.stringify(data);
     S = C.migrate(data);
     recompute();
@@ -270,6 +271,8 @@
       if (r.message) tell(r.message);
       return;
     }
+    // saved data that cannot be opened is never thrown away: a copy is kept before starting over
+    if (r.data) { await Store.snapshotBefore(r.data, 'נתונים שלא הצליחו להיפתח', { prefix: 'bad-', keep: 3, minGapMin: 60 }); notice = 'הנתונים השמורים לא הצליחו להיפתח. נשמר מהם עותק בהגדרות ← עותקים (אפשר לשמור אותו כקובץ).'; }
     window.Wizard.show();
   }
   function needUpdate() {
@@ -660,7 +663,7 @@
     if (anyData && used && !autoFresh && ui.tab !== 'settings' && (!meta.backup || Date.now() - meta.backup > remindDays * 864e5) && meta.remindOff !== new Date().toISOString().slice(0, 10))
       extra += `<div class="banner warn"><span class="grow">${meta.backup ? `עבר יותר מ-${remindDays === 7 ? 'שבוע' : 'שבועיים'} מהגיבוי האחרון.` : 'עוד לא שמרת גיבוי.'} הנתונים שמורים רק במכשיר הזה.</span><button class="sm" id="doBackup">⬇ שמור גיבוי</button><button class="sm ghost" id="remindOff">מחר</button></div>`;
     if (Store.isIOS() && !Store.isStandalone() && ui.tab !== 'settings' && !meta.iosTipOff)
-      extra += `<div class="banner info"><span class="grow">📲 באייפון כדאי להוסיף את האפליקציה למסך הבית (שיתוף ⬆ ← "הוסף למסך הבית"), כדי שהנתונים יישמרו לאורך זמן.</span><button class="sm ghost" id="iosTipOff">הבנתי</button></div>`;
+      extra += `<div class="banner info"><span class="grow">📲 באייפון כדאי להוסיף את האפליקציה למסך הבית (שיתוף ⬆ ← "הוסף למסך הבית"), כי ספארי עלול למחוק נתונים של אתר שלא נפתח שבוע.${anyData ? ' <b>לפני כן:</b> שמור גיבוי לקובץ או חבר את Dropbox (בהגדרות), כי לאפליקציה שבמסך הבית יש אחסון נפרד. שם פותחים את הגיבוי או מתחברים לאותו Dropbox.' : ''}</span>${anyData ? '<button class="sm" id="iosBackup">⬇ שמור גיבוי</button>' : ''}<button class="sm ghost" id="iosTipOff">הבנתי</button></div>`;
     if (ui.tab === 'settings' && !meta.seenSettings) Store.setMeta({ seenSettings: 1 });
     if (ui.tab === 'summary') main.innerHTML = staleBar + nb + extra + guideCard() + renderYear();
     else if (ui.tab === 'settings') { main.innerHTML = staleBar + nb + renderSettings(); fillSnapList(); }
@@ -1082,7 +1085,7 @@
   document.addEventListener('click', async e => {
     const t = e.target.closest('button');
     if (!t || t.closest('#modal') || !S || t.closest('.wiz')) return;
-    if (staleTab && !(t.id === 'takeOver' || t.id === 'noticeX' || t.id === 'hdrBackup' || t.id === 'doBackup' || t.dataset.tab !== undefined || t.dataset.info)) { readOnlyNote(); return; }
+    if (staleTab && !(t.id === 'takeOver' || t.id === 'noticeX' || t.id === 'hdrBackup' || t.id === 'doBackup' || t.id === 'iosBackup' || t.dataset.tab !== undefined || t.dataset.info)) { readOnlyNote(); return; }
     if (window.ImportUI.active) { if (!t.closest('#top')) return; window.ImportUI.cancel(); } // leaving the import screen from the header or months
     if (t.id === 'undo') return undo();
     if (t.id === 'redo') return redo();
@@ -1111,7 +1114,16 @@
       }
       return;
     }
-    if (t.id === 'doBackup' || t.id === 'hdrBackup') { flushSave(); const r = await Store.exportFile(S); if (r.ok) { setStatus('הגיבוי נשמר ✓'); render(); } return; }
+    if (t.id === 'doBackup' || t.id === 'hdrBackup' || t.id === 'iosBackup') {
+      flushSave(); const r = await Store.exportFile(S);
+      if (r.ok) { setStatus('הגיבוי נשמר ✓'); render(); }
+      else if (r.copyText) {
+        let ok = false; try { await navigator.clipboard.writeText(r.copyText); ok = true; } catch (_) { /* not allowed */ }
+        tell(ok ? 'הגיבוי הועתק. פתח את אפליקציית "קבצים" או "פתקים", הדבק ושמור. עדיף: חבר את Dropbox בהגדרות, ואז הכל נשמר לבד.' : 'באפליקציה שבמסך הבית אי אפשר להוריד קובץ. חבר את Dropbox בהגדרות, ואז הכל נשמר לבד.');
+        if (ok) Store.setMeta({ backup: Date.now() });
+      }
+      return;
+    }
     if (t.id === 'doRestore') { $('#fileBackup').click(); return; }
     if (t.id === 'hdrInstall' || t.id === 'doInstall') {
       if (installEvt) { installEvt.prompt(); const c = await installEvt.userChoice.catch(() => null); if (c && c.outcome === 'accepted') { installEvt = null; $('#hdrInstall').hidden = true; } }
@@ -1139,6 +1151,7 @@
     if (t.dataset.color) { pushUndo(true); S.settings.theme = t.dataset.color; applyLook(); queueSave(true); render(); return; }
     if (t.dataset.snap) {
       const s = await Store.snapshot(t.dataset.snap);
+      if (s && !C.isValid(s.data)) { if (await ask('העותק הזה לא נפתח באפליקציה. לשמור אותו כקובץ (למשל לשליחה לבדיקה)?', { ok: 'שמור כקובץ' })) await Store.exportFile(s.data); return; }
       if (s && C.isValid(s.data) && await ask('לשחזר את העותק מ-' + new Date(s.time).toLocaleString('he-IL') + '? הנתונים הנוכחיים יוחלפו (אפשר לבטל עם ↶).', { ok: 'שחזר' })) {
         pushUndo(true); await Store.snapshotBefore(S, 'לפני שחזור עותק'); await start(s.data, { tab: 'summary', noCatchUp: true }); setStatus('שוחזר ✓');
       }

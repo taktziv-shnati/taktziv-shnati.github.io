@@ -10,13 +10,15 @@
   let pending = false, reloading = false, quietTicks = 0;
 
   // a quiet moment: no dialog, nothing focused for typing, no import or opening flow in progress
-  function quiet() {
+  // a flow that a refresh would cut off (a dialog such as the Dropbox code, an import, the opening wizard): never refresh, even in the background
+  function inFlow() {
     const m = document.getElementById('modal');
+    return !!((m && !m.hidden) || (window.ImportUI && window.ImportUI.active) || document.querySelector('.wiz'));
+  }
+  function quiet() {
     const a = document.activeElement;
-    if (m && !m.hidden) return false;
+    if (inFlow()) return false;
     if (a && /^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName)) return false;
-    if (window.ImportUI && window.ImportUI.active) return false;
-    if (document.querySelector('.wiz')) return false;
     return true;
   }
   async function apply(force) {
@@ -30,7 +32,7 @@
       }
     } catch (_) { /* the data is already saved on every change */ }
     // the user came back and started typing meanwhile: wait for the next quiet moment
-    if (!force && !document.hidden && !quiet()) { reloading = false; quietTicks = 0; return; }
+    if (!force && (document.hidden ? inFlow() : !quiet())) { reloading = false; quietTicks = 0; return; }
     try { const app = A(); sessionStorage.setItem('b4a-updated', JSON.stringify({ time: Date.now(), place: app && app.place ? app.place() : null })); } catch (_) { /* ignore */ }
     if (force) {
       try { const regs = await sw.getRegistrations(); await Promise.all(regs.map(r => r.unregister())); } catch (_) { /* ignore */ }
@@ -41,7 +43,7 @@
   function onNewVersion() {
     if (pending) return;
     pending = true;
-    if (document.hidden) apply(false); // in the background: the best moment
+    if (document.hidden && !inFlow()) apply(false); // in the background: the best moment (unless a flow is open)
   }
   sw.addEventListener('controllerchange', () => { if (hadController) onNewVersion(); });
   // wait for two quiet checks in a row (6 seconds), then refresh
@@ -51,14 +53,14 @@
     if (quietTicks >= 2) { if (A() && A().setStatus) A().setStatus('מתעדכן לגרסה חדשה…'); setTimeout(() => apply(false), 600); }
   }, 3000);
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden) { if (pending) apply(false); return; }
+    if (document.hidden) { if (pending && !inFlow()) apply(false); return; }
     check(); // back to the app: look for a new version
   });
 
   // look for a new version (at most every 20 minutes, and when coming back to the app)
   let lastCheck = 0;
-  async function check() {
-    if (Date.now() - lastCheck < 20 * 60e3) return;
+  async function check(now) {
+    if (now !== true && Date.now() - lastCheck < 20 * 60e3) return;
     lastCheck = Date.now();
     try { const r = await sw.getRegistration(); if (r) r.update(); } catch (_) { /* offline */ }
     try {
@@ -77,5 +79,5 @@
   setInterval(check, 20 * 60e3);
   setTimeout(check, 4000);
 
-  window.BudgetUpdate = { check, force: () => apply(true), quiet, get pending() { return pending; }, _simulate: onNewVersion };
+  window.BudgetUpdate = { check: () => check(true), inFlow, force: () => apply(true), quiet, get pending() { return pending; }, _simulate: onNewVersion };
 })();

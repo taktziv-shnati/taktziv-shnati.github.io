@@ -371,7 +371,15 @@
     chainMonths(S).forEach(({ m }) => Object.values(m.rows || {}).forEach(rows => rows.forEach(r => { if (r.cat === catId) r.cat = ''; })));
   }
 
-  const isValid = d => !!d && typeof d === 'object' && d.app === 'budget-for-all' && Array.isArray(d.sections) && !!d.years && typeof d.years === 'object';
+  // deep enough that a damaged or hostile file is refused with a message instead of breaking the app later
+  const isObj = o => !!o && typeof o === 'object' && !Array.isArray(o);
+  const SAFE_ID = /^[\w-]{1,40}$/;
+  const isValid = d => isObj(d) && d.app === 'budget-for-all' && Array.isArray(d.sections) && isObj(d.years)
+    && d.sections.every(s => isObj(s) && typeof s.id === 'string' && SAFE_ID.test(s.id) && Object.prototype.hasOwnProperty.call(TYPES, s.type))
+    && (d.categories == null || (Array.isArray(d.categories) && d.categories.every(c => isObj(c) && typeof c.id === 'string' && SAFE_ID.test(c.id))))
+    && Object.keys(d.years).every(y => /^\d{4}$/.test(y) && isObj(d.years[y]) && (d.years[y].months == null || (isObj(d.years[y].months)
+      && Object.keys(d.years[y].months).every(k => isObj(d.years[y].months[k]) && (d.years[y].months[k].rows == null || (isObj(d.years[y].months[k].rows)
+        && Object.values(d.years[y].months[k].rows).every(rs => Array.isArray(rs) && rs.every(isObj))))))));
 
   const api = { num, r2, clone, uid, TYPES, DEFAULT_SECTIONS, DEFAULT_CATEGORIES, CATEGORY_PRESETS, ICONS, SETTINGS_DEFAULT,
     DATA_V, newBudget, seedMonth, migrate, newRow, emptyMonth, active, rowsOf, keepOf,
