@@ -62,7 +62,7 @@
   async function check(now) {
     if (now !== true && Date.now() - lastCheck < 20 * 60e3) return;
     lastCheck = Date.now();
-    try { const r = await sw.getRegistration(); if (r) r.update(); } catch (_) { /* offline */ }
+    try { const r = await sw.getRegistration(); if (r) r.update().catch(() => {}); } catch (_) { /* offline */ }
     try {
       const res = await fetch('version.json', { cache: 'no-store' });
       if (!res.ok) return;

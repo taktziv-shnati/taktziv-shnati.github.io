@@ -2,7 +2,9 @@
 // Nothing leaves the device. Works in the browser (window.BudgetImport) and in Node (tests).
 (function (root) {
   'use strict';
-  const XLSX = root.XLSX || (typeof require !== 'undefined' ? require('../vendor/xlsx.full.min.js') : null);
+  // the spreadsheet reader is a big file that loads in the background (async), so it is looked up when a file is read
+  const nodeXlsx = typeof require !== 'undefined' ? require('../vendor/xlsx.full.min.js') : null;
+  const getXlsx = () => { const x = root.XLSX || nodeXlsx; if (!x) throw new Error('רכיב קריאת הקבצים עדיין נטען. נסה שוב בעוד כמה שניות.'); return x; };
   const C = root.BudgetCalc || (typeof require !== 'undefined' ? require('./calc.js') : null);
   const r2 = x => Math.round((x + Number.EPSILON) * 100) / 100;
   const norm = s => String(s == null ? '' : s).replace(/[‎‏‪-‮⁦-⁩"'״׳`]/g, '').replace(/\s+/g, ' ').trim();

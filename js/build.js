@@ -1,8 +1,9 @@
 // The app's build number and "what's new". Every release: n + 1 (and VERSION in sw.js), and a short line in NOTES.
 // version.json { "min": N } on the server forces every copy older than N to refresh at once (for a serious bug).
 window.BUILD = {
-  n: 11,
+  n: 12,
   notes: [
+    { n: 12, text: "האפליקציה נפתחת מהר יותר" },
     { n: 11, text: "שיפורי אמינות: סנכרון בטוח יותר בין מכשירים, עבודה טובה יותר באייפון ובקליטה חלשה" },
     { n: 10, text: "הודעת שגיאה מפורטת בחיבור ל-Dropbox" },
     { n: 8, text: "חדש: סנכרון אוטומטי בין הטלפון למחשב דרך Dropbox (בהגדרות, ב״גיבוי וסנכרון״)." },
